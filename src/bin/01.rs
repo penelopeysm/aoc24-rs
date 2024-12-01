@@ -2,17 +2,19 @@ use std::collections::HashMap;
 
 advent_of_code::solution!(1);
 
-
 fn parse_input_and_sort(input: &str) -> (Vec<u32>, Vec<u32>) {
     let mut xs = Vec::new();
     let mut ys = Vec::new();
     for line in input.lines() {
-        let parts = line.split_whitespace().map(|n| n.parse()).collect::<Vec<Result<u32,_>>>();
+        let parts = line
+            .split_whitespace()
+            .map(|n| n.parse())
+            .collect::<Vec<Result<u32, _>>>();
         match parts[..] {
             [Ok(x), Ok(y)] => {
                 xs.push(x);
                 ys.push(y);
-            },
+            }
             _ => panic!("Invalid input, expected two positive integers per line"),
         }
     }
@@ -25,18 +27,20 @@ fn parse_input_into_count_maps(input: &str) -> (HashMap<u32, u32>, HashMap<u32, 
     let mut x_counts = HashMap::new();
     let mut y_counts = HashMap::new();
     for line in input.lines() {
-        let parts = line.split_whitespace().map(|n| n.parse()).collect::<Vec<Result<u32,_>>>();
+        let parts = line
+            .split_whitespace()
+            .map(|n| n.parse())
+            .collect::<Vec<Result<u32, _>>>();
         match parts[..] {
             [Ok(x), Ok(y)] => {
                 x_counts.entry(x).and_modify(|e| *e += 1).or_insert(1);
                 y_counts.entry(y).and_modify(|e| *e += 1).or_insert(1);
-            },
+            }
             _ => panic!("Invalid input, expected two positive integers per line"),
         }
     }
     (x_counts, y_counts)
 }
-
 
 pub fn part_one(input: &str) -> Option<u32> {
     let (sorted_xs, sorted_ys) = parse_input_and_sort(input);
@@ -58,7 +62,7 @@ pub fn part_two(input: &str) -> Option<u32> {
         acc += key * n_left * n_right;
     }
     Some(acc)
-// }
+    // }
 }
 
 #[cfg(test)]
