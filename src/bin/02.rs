@@ -1,15 +1,14 @@
 advent_of_code::solution!(2);
 
-fn parse_line(line: &str) -> Vec<i32> {
-    // Parse the numbers into a list
-    // TODO: Can this be a lazy iterator?
-    line.split_whitespace()
+/// Parse whitespace-separated integers into a vector
+fn parse_line(line: &str) -> Vec<i32> { line.split_whitespace()
         .map(|n| n.parse().expect("Not an integer"))
         .collect()
 }
 
+/// Given a list of numbers a_0, a_1, ..., a_(n-1), calculate the differences d_i where d_i =
+/// a_{i+1} - a_i for i = 0, 1, ..., n-2.
 fn calculate_diffs(numbers: &[i32]) -> Vec<i32> {
-    // Calculate the difference between each pair of successive entries
     let mut result = Vec::new();
     for i in 0..(numbers.len() - 1) {
         result.push(numbers[i + 1] - numbers[i]);
@@ -17,6 +16,7 @@ fn calculate_diffs(numbers: &[i32]) -> Vec<i32> {
     result
 }
 
+/// Check if a series of differences is fully safe
 fn diffs_are_safe(diffs: &[i32]) -> bool {
     // Ascending
     if diffs.iter().all(|d| (1..4).contains(d)) {
@@ -29,22 +29,27 @@ fn diffs_are_safe(diffs: &[i32]) -> bool {
     false
 }
 
+/// Check if a series of numbers is fully safe
 fn is_safe(numbers: &[i32]) -> bool {
     diffs_are_safe(&calculate_diffs(numbers))
 }
 
+/// 'Contract' a list of differences. Effectively, passing idx=j will remove the (j+1)-th number of
+/// the original list and recalculate the diffs, except that it doesn't use the original list.
 fn contract_diffs(diffs: &[i32], idx: usize) -> Vec<i32> {
     // Clone all entries to Somes
     let mut new_diffs = diffs.iter().map(|d| Some(*d)).collect::<Vec<Option<i32>>>();
     // Overwrite diff[idx] with None
     new_diffs[idx] = None;
-    // Calculate the new diff on the right
+    // Calculate the new diff to the right
     if idx < diffs.len() - 1 {
         new_diffs[idx + 1] = Some(diffs[idx + 1] + diffs[idx]);
     }
+    // Remove None
     new_diffs.into_iter().flatten().collect()
 }
 
+/// Check if a series of numbers is fully safe with at most one removal.
 fn is_safe_with_one_removal(numbers: &[i32]) -> bool {
     // This algorithm removes each diff one at a time.
     let diffs = calculate_diffs(numbers);
