@@ -10,24 +10,24 @@ advent_of_code::solution!(3);
 /// Part 1: 189600467 (309.7µs @ 476 samples)
 /// Part 2: 107069718 (334.3µs @ 2065 samples)
 
-struct Mul {
-    a: u32,
-    b: u32,
+struct _Mul {
+    _a: u32,
+    _b: u32,
 }
 
-impl From<(&str, &str)> for Mul {
+impl From<(&str, &str)> for _Mul {
     fn from((a_str, b_str): (&str, &str)) -> Self {
         let a = a_str.parse().unwrap();
         let b = b_str.parse().unwrap();
-        Mul { a, b }
+        _Mul { _a: a, _b: b }
     }
 }
 
-fn sum_muls(muls: &[Mul]) -> u32 {
-    muls.iter().map(|mul| mul.a * mul.b).sum()
+fn _sum_muls(muls: &[_Mul]) -> u32 {
+    muls.iter().map(|mul| mul._a * mul._b).sum()
 }
 
-fn extract_muls(input: &str) -> Vec<Mul> {
+fn _extract_muls(input: &str) -> Vec<_Mul> {
     let re = Regex::new(r#"mul\((\d{1,3}),(\d{1,3})\)"#).unwrap();
     let mut muls = vec![];
     for (_, [a_str, b_str]) in re.captures_iter(input).map(|c| c.extract()) {
@@ -38,7 +38,7 @@ fn extract_muls(input: &str) -> Vec<Mul> {
 
 // NOTE: This is VERY unsatisfactory compared to a parser, especially with the extra capture groups
 // at the end
-fn extract_muls_with_instructions(input: &str) -> Vec<Mul> {
+fn _extract_muls_with_instructions(input: &str) -> Vec<_Mul> {
     let re = Regex::new(r#"mul\((\d{1,3}),(\d{1,3})\)|do\(\)(())|don't\(\)(())"#).unwrap();
     let mut muls = vec![];
     let mut enabled = true;
