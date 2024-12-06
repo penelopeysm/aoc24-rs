@@ -95,21 +95,37 @@ struct LabMap {
 }
 
 impl LabMap {
-    /// Take a step in the direction the guard is facing.
-    ///
-    /// If the step would cause the guard to move out of bounds, set
-    /// self.terminated to Some(OutOfBounds). If the step would cause the guard to enter a loop,
-    /// set it to Some(HitLoop).
-    fn step1(&mut self) {
-        // Add current square and direction to the visited. Also check for loops
+    fn track_direction(&mut self) {
         if let Square::NotObstacle(visited) =
             &mut self.board[self.guard.index.0][self.guard.index.1]
         {
             if visited.contains(&self.guard.direction) {
                 self.terminated = Some(TerminationCondition::HitLoop);
-                return;
             } else {
                 visited.insert(self.guard.direction.clone());
+            }
+        }
+    }
+
+    /// Take a step in the direction the guard is facing.
+    ///
+    /// If the step would cause the guard to move out of bounds, set self.terminated to
+    /// Some(OutOfBounds). If the step would cause the guard to enter a loop, set it to
+    /// Some(HitLoop).
+    ///
+    /// The `full` parameter determines whether tracking is enabled for every square the guard
+    /// visits, or just the squares immediately before obstacles. For part 1 of this problem, we
+    /// need to track every square; however, for part 2 (to determine loops), we only need to track
+    /// the squares immediately before obstacles to see whether they are revisited multiple times.
+    /// This results in a ~ 2.5x speedup.
+    ///
+    /// I didn't come up with this idea myself unfortunately, I saw it on Reddit.
+    fn step1(&mut self, full: bool) {
+        // Add current square and direction to the visited. Also check for loops
+        if full {
+            self.track_direction();
+            if self.terminated.is_some() {
+                return;
             }
         }
 
@@ -127,6 +143,9 @@ impl LabMap {
             // In bounds, so move the guard appropriately
             Some((x, y)) => match self.board[x][y] {
                 Square::Obstacle => {
+                    if !full {
+                        self.track_direction();
+                    }
                     self.guard.direction = rotate_right(&self.guard.direction);
                 }
                 _ => {
@@ -136,9 +155,9 @@ impl LabMap {
         }
     }
 
-    fn run(&mut self) {
+    fn run(&mut self, full: bool) {
         while self.terminated.is_none() {
-            self.step1();
+            self.step1(full);
         }
     }
 
@@ -204,7 +223,7 @@ impl From<&str> for LabMap {
 
 pub fn part_one(input: &str) -> Option<u32> {
     let mut map: LabMap = input.into();
-    map.run();
+    map.run(true);
     Some(map.count_visited() as u32)
 }
 
@@ -215,7 +234,7 @@ pub fn part_two(input: &str) -> Option<u32> {
     // set of possible locations where adding an obstacle could affect the
     // trajectory.
     let mut final_map = map.clone();
-    final_map.run();
+    final_map.run(true);
     let possible_obstacles: HashSet<_> = iproduct!(0..final_map.nrows, 0..final_map.ncols)
         .filter(|(i, j)| final_map.board[*i][*j].has_been_visited())
         .collect();
@@ -225,7 +244,7 @@ pub fn part_two(input: &str) -> Option<u32> {
     for (i, j) in possible_obstacles {
         let mut new_map = map.clone();
         new_map.board[i][j] = Square::Obstacle;
-        new_map.run();
+        new_map.run(false);
         if new_map.terminated == Some(TerminationCondition::HitLoop) {
             n_loops += 1;
         }
