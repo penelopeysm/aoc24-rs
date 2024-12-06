@@ -86,126 +86,124 @@ struct LabMap {
     terminated: Option<TerminationCondition>,
 }
 
-// Take a step in the direction the guard is facing.
-//
-// If the step would cause the guard to move out of bounds, return the
-// same map and Some(OutOfBounds).
-//
-// If the step would cause the guard to enter a loop, return the same
-// map and Some(HitLoop).
-//
-// Otherwise, return the updated map and None
-fn _step_1_and_check(mut map: LabMap) -> LabMap {
-    // Check for out of bounds
-    let next_index = get_next_index(map.nrows, map.ncols, map.guard.index, &map.guard.direction);
-    match next_index {
-        None => {
-            map.terminated = Some(TerminationCondition::OutOfBounds);
-            map
-        }
-        // Move the guard
-        Some((x, y)) => {
-            match map.board[x][y] {
-                (Square::Obstacle, _) => {
-                    map.guard.direction = rotate_right(&map.guard.direction);
-                    map.board[map.guard.index.0][map.guard.index.1]
-                        .1
-                        .insert(map.guard.direction.clone());
-                }
-                _ => {
-                    map.guard.index = (x, y);
-                    // Check for loop
-                    if map.board[x][y].1.contains(&map.guard.direction) {
-                        map.terminated = Some(TerminationCondition::HitLoop);
-                        return map;
-                    }
-                    // If no loop, proceed
-                    map.board[x][y].1.insert(map.guard.direction.clone());
-                    map.board[x][y].0 = Square::Visited;
-                }
+impl LabMap {
+    /// Take a step in the direction the guard is facing.
+    ///
+    /// If the step would cause the guard to move out of bounds, return the same map and
+    /// Some(OutOfBounds). If the step would cause the guard to enter a loop, return the same map
+    /// and Some(HitLoop). Otherwise, return the updated map and None
+    fn _step_1_and_check(mut map: LabMap) -> LabMap {
+        // Check for out of bounds
+        let next_index =
+            get_next_index(map.nrows, map.ncols, map.guard.index, &map.guard.direction);
+        match next_index {
+            None => {
+                map.terminated = Some(TerminationCondition::OutOfBounds);
+                map
             }
-            map
+            // Move the guard
+            Some((x, y)) => {
+                match map.board[x][y] {
+                    (Square::Obstacle, _) => {
+                        map.guard.direction = rotate_right(&map.guard.direction);
+                        map.board[map.guard.index.0][map.guard.index.1]
+                            .1
+                            .insert(map.guard.direction.clone());
+                    }
+                    _ => {
+                        map.guard.index = (x, y);
+                        // Check for loop
+                        if map.board[x][y].1.contains(&map.guard.direction) {
+                            map.terminated = Some(TerminationCondition::HitLoop);
+                            return map;
+                        }
+                        // If no loop, proceed
+                        map.board[x][y].1.insert(map.guard.direction.clone());
+                        map.board[x][y].0 = Square::Visited;
+                    }
+                }
+                map
+            }
         }
     }
-}
 
-// Same behaviour as _step_1_and_check, but attempts to move multiple squares at a time. It leads to
-// around a 10% speedup.
-fn step_n_and_check(mut map: LabMap) -> LabMap {
-    // Get the indices of all unblocked squares in front of the guard,
-    // together with a flag to indicate whether it terminates by going
-    // out of bounds
-    let mut next_indices = Vec::new();
-    let mut out_of_bounds = false;
-    let mut next_index =
-        get_next_index(map.nrows, map.ncols, map.guard.index, &map.guard.direction);
-    loop {
-        match next_index {
-            // If moved out of bounds, set flag to true.
-            None => {
-                out_of_bounds = true;
-                break;
-            }
-            Some((x, y)) => {
-                // Break if hit an obstacle
-                if map.board[x][y].0 == Square::Obstacle {
+    // Same behaviour as _step_1_and_check, but attempts to move multiple squares at a time. It leads to
+    // around a 10% speedup.
+    fn step_n_and_check(&mut self) {
+        // Get the indices of all unblocked squares in front of the guard,
+        // together with a flag to indicate whether it terminates by going
+        // out of bounds
+        let mut next_indices = Vec::new();
+        let mut out_of_bounds = false;
+        let mut next_index =
+            get_next_index(self.nrows, self.ncols, self.guard.index, &self.guard.direction);
+        loop {
+            match next_index {
+                // If moved out of bounds, set flag to true.
+                None => {
+                    out_of_bounds = true;
                     break;
                 }
-                // Else add the index
-                else {
-                    next_indices.push((x, y));
-                    next_index = get_next_index(map.nrows, map.ncols, (x, y), &map.guard.direction);
+                Some((x, y)) => {
+                    // Break if hit an obstacle
+                    if self.board[x][y].0 == Square::Obstacle {
+                        break;
+                    }
+                    // Else add the index
+                    else {
+                        next_indices.push((x, y));
+                        next_index =
+                            get_next_index(self.nrows, self.ncols, (x, y), &self.guard.direction);
+                    }
                 }
             }
         }
-    }
-    // Set the squares to visited + add the directions
-    for (x, y) in &next_indices[..] {
-        // Check if any loops are hit
-        if map.board[*x][*y].1.contains(&map.guard.direction) {
-            map.terminated = Some(TerminationCondition::HitLoop);
-            return map;
-        }
-        // If not, add them
-        map.board[*x][*y].1.insert(map.guard.direction.clone());
-        map.board[*x][*y].0 = Square::Visited;
-    }
-    // If out of bounds, terminate
-    if out_of_bounds {
-        map.terminated = Some(TerminationCondition::OutOfBounds);
-        map
-    }
-    // If not out of bounds, means we hit an obstacle. Rotate right and continue
-    else {
-        map.guard.direction = rotate_right(&map.guard.direction);
-        match next_indices.last() {
-            None => {}
-            Some((x, y)) => {
-                map.guard.index = (*x, *y);
+        // Set the squares to visited + add the directions
+        for (x, y) in &next_indices[..] {
+            // Check if any loops are hit
+            if self.board[*x][*y].1.contains(&self.guard.direction) {
+                self.terminated = Some(TerminationCondition::HitLoop);
+                return;
             }
+            // If not, add them
+            self.board[*x][*y].1.insert(self.guard.direction.clone());
+            self.board[*x][*y].0 = Square::Visited;
         }
-        map.board[map.guard.index.0][map.guard.index.1]
-            .1
-            .insert(map.guard.direction.clone());
-        map
+        // If out of bounds, terminate
+        if out_of_bounds {
+            self.terminated = Some(TerminationCondition::OutOfBounds);
+        }
+        // If not out of bounds, means we hit an obstacle. Rotate right and continue
+        else {
+            self.guard.direction = rotate_right(&self.guard.direction);
+            match next_indices.last() {
+                None => {}
+                Some((x, y)) => {
+                    self.guard.index = (*x, *y);
+                }
+            }
+            self.board[self.guard.index.0][self.guard.index.1]
+                .1
+                .insert(self.guard.direction.clone());
+        }
     }
-}
 
-fn run(mut map: LabMap) -> LabMap {
-    // Take one step
-    map = step_n_and_check(map);
-    match map.terminated {
-        Some(_) => map,
-        None => run(map),
+    fn run(&mut self) {
+        // Take one step
+        self.step_n_and_check();
+        // If not yet terminated, run again
+        if self.terminated.is_none() {
+            self.run();
+        }
     }
-}
 
-fn count_visited(map: LabMap) -> usize {
-    map.board
-        .iter()
-        .flatten()
-        .filter(|x| x.0 == Square::Visited)
-        .count()
+    fn count_visited(self) -> usize {
+        self.board
+            .iter()
+            .flatten()
+            .filter(|x| x.0 == Square::Visited)
+            .count()
+    }
 }
 
 fn parse_input(input: &str) -> LabMap {
@@ -256,9 +254,9 @@ fn parse_input(input: &str) -> LabMap {
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
-    let map = parse_input(input);
-    let final_map = run(map);
-    Some(count_visited(final_map) as u32)
+    let mut map = parse_input(input);
+    map.run();
+    Some(map.count_visited() as u32)
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
@@ -284,12 +282,13 @@ pub fn part_two(input: &str) -> Option<u32> {
     // Run the map once to get the trajectory. We use this to determine the
     // set of possible locations where adding an obstacle could affect the
     // trajectory.
-    let final_map = run(map.clone());
+    let mut final_map = map.clone();
+    final_map.run();
     let mut possible_obstacles = HashSet::new();
-    for (i, j) in iproduct!(0..map.nrows, 0..map.ncols) {
+    for (i, j) in iproduct!(0..final_map.nrows, 0..final_map.ncols) {
         if let (Square::Visited, dirs) = &final_map.board[i][j] {
             for dir in dirs {
-                let possible_obstacle_index = get_next_index(map.nrows, map.ncols, (i, j), dir);
+                let possible_obstacle_index = get_next_index(final_map.nrows, final_map.ncols, (i, j), dir);
                 if let Some((x, y)) = possible_obstacle_index {
                     if final_map.board[x][y].0 != Square::Obstacle {
                         possible_obstacles.insert((x, y));
@@ -300,9 +299,10 @@ pub fn part_two(input: &str) -> Option<u32> {
     }
     // Then we iterate through that set, instead of the entire map
     for (i, j) in possible_obstacles {
-        let mut map = map.clone();
-        map.board[i][j].0 = Square::Obstacle;
-        if run(map).terminated == Some(TerminationCondition::HitLoop) {
+        let mut new_map = map.clone();
+        new_map.board[i][j].0 = Square::Obstacle;
+        new_map.run();
+        if new_map.terminated == Some(TerminationCondition::HitLoop) {
             // println!("Loop detected at ({}, {})", i, j);
             n_loops += 1;
         }
