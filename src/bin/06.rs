@@ -1,7 +1,6 @@
 advent_of_code::solution!(6);
 
 use itertools::iproduct;
-use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq)]
 enum Square {
@@ -241,9 +240,9 @@ pub fn part_two(input: &str) -> Option<u32> {
     // trajectory.
     let mut final_map = map.clone();
     final_map.run(true);
-    let possible_obstacles: BTreeSet<_> = iproduct!(0..final_map.nrows, 0..final_map.ncols)
+    let possible_obstacles = iproduct!(0..final_map.nrows, 0..final_map.ncols)
         .filter(|(i, j)| final_map.board[*i][*j].has_been_visited())
-        .collect();
+        .collect::<Vec<_>>();
 
     // Then we iterate through that set, instead of the entire map
     let mut n_loops = 0;
