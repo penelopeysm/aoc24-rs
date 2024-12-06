@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq)]
 enum Square {
-    NotObstacle(BTreeSet<Direction>), // Directions already visited
+    NotObstacle(u32), // Number of directions already visited
     Obstacle,
 }
 
@@ -13,7 +13,7 @@ impl Square {
     fn has_been_visited(&self) -> bool {
         match self {
             Square::Obstacle => false,
-            Square::NotObstacle(visited) => !visited.is_empty(),
+            Square::NotObstacle(visited) => *visited > 0,
         }
     }
 }
@@ -99,10 +99,13 @@ impl LabMap {
         if let Square::NotObstacle(visited) =
             &mut self.board[self.guard.index.0][self.guard.index.1]
         {
-            if visited.contains(&self.guard.direction) {
+            // By the pigeonhole principle, if we've visited a square more
+            // than 4 times, at least 2 of those times must have been in
+            // the same direction. This means we've hit a loop.
+            if *visited > 4 {
                 self.terminated = Some(TerminationCondition::HitLoop);
             } else {
-                visited.insert(self.guard.direction.clone());
+               *visited += 1;
             }
         }
     }
@@ -174,7 +177,7 @@ impl From<&str> for LabMap {
     fn from(input: &str) -> Self {
         fn parse_char(input: char) -> (Square, Option<Direction>) {
             fn not_obstacle() -> Square {
-                Square::NotObstacle(BTreeSet::new())
+                Square::NotObstacle(0)
             }
             match input {
                 '#' => (Square::Obstacle, None),
