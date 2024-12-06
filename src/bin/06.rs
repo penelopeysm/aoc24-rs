@@ -5,8 +5,7 @@ use std::collections::HashSet;
 
 #[derive(Clone, PartialEq)]
 enum Square {
-    Visited,
-    NotVisited,
+    NotObstacle(HashSet<Direction>),
     Obstacle,
 }
 
@@ -79,7 +78,7 @@ fn rotate_right(dir: &Direction) -> Direction {
 
 #[derive(Clone)]
 struct LabMap {
-    board: Vec<Vec<(Square, HashSet<Direction>)>>,
+    board: Vec<Vec<Square>>,
     nrows: usize,
     ncols: usize,
     guard: Guard,
@@ -89,111 +88,48 @@ struct LabMap {
 impl LabMap {
     /// Take a step in the direction the guard is facing.
     ///
-    /// If the step would cause the guard to move out of bounds, return the same map and
-    /// Some(OutOfBounds). If the step would cause the guard to enter a loop, return the same map
-    /// and Some(HitLoop). Otherwise, return the updated map and None
-    fn _step_1_and_check(mut map: LabMap) -> LabMap {
-        // Check for out of bounds
-        let next_index =
-            get_next_index(map.nrows, map.ncols, map.guard.index, &map.guard.direction);
-        match next_index {
-            None => {
-                map.terminated = Some(TerminationCondition::OutOfBounds);
-                map
-            }
-            // Move the guard
-            Some((x, y)) => {
-                match map.board[x][y] {
-                    (Square::Obstacle, _) => {
-                        map.guard.direction = rotate_right(&map.guard.direction);
-                        map.board[map.guard.index.0][map.guard.index.1]
-                            .1
-                            .insert(map.guard.direction.clone());
-                    }
-                    _ => {
-                        map.guard.index = (x, y);
-                        // Check for loop
-                        if map.board[x][y].1.contains(&map.guard.direction) {
-                            map.terminated = Some(TerminationCondition::HitLoop);
-                            return map;
-                        }
-                        // If no loop, proceed
-                        map.board[x][y].1.insert(map.guard.direction.clone());
-                        map.board[x][y].0 = Square::Visited;
-                    }
-                }
-                map
-            }
-        }
-    }
-
-    // Same behaviour as _step_1_and_check, but attempts to move multiple squares at a time. It leads to
-    // around a 10% speedup.
-    fn step_n_and_check(&mut self) {
-        // Get the indices of all unblocked squares in front of the guard,
-        // together with a flag to indicate whether it terminates by going
-        // out of bounds
-        let mut next_indices = Vec::new();
-        let mut out_of_bounds = false;
-        let mut next_index =
-            get_next_index(self.nrows, self.ncols, self.guard.index, &self.guard.direction);
-        loop {
-            match next_index {
-                // If moved out of bounds, set flag to true.
-                None => {
-                    out_of_bounds = true;
-                    break;
-                }
-                Some((x, y)) => {
-                    // Break if hit an obstacle
-                    if self.board[x][y].0 == Square::Obstacle {
-                        break;
-                    }
-                    // Else add the index
-                    else {
-                        next_indices.push((x, y));
-                        next_index =
-                            get_next_index(self.nrows, self.ncols, (x, y), &self.guard.direction);
-                    }
-                }
-            }
-        }
-        // Set the squares to visited + add the directions
-        for (x, y) in &next_indices[..] {
-            // Check if any loops are hit
-            if self.board[*x][*y].1.contains(&self.guard.direction) {
+    /// If the step would cause the guard to move out of bounds, set
+    /// self.terminated to Some(OutOfBounds). If the step would cause the guard to enter a loop,
+    /// set it to Some(HitLoop).
+    fn step1(&mut self) {
+        // Add current square and direction to the visited. Also check for loops
+        if let Square::NotObstacle(visited) =
+            &mut self.board[self.guard.index.0][self.guard.index.1]
+        {
+            if visited.contains(&self.guard.direction) {
                 self.terminated = Some(TerminationCondition::HitLoop);
                 return;
+            } else {
+                visited.insert(self.guard.direction.clone());
             }
-            // If not, add them
-            self.board[*x][*y].1.insert(self.guard.direction.clone());
-            self.board[*x][*y].0 = Square::Visited;
         }
-        // If out of bounds, terminate
-        if out_of_bounds {
-            self.terminated = Some(TerminationCondition::OutOfBounds);
-        }
-        // If not out of bounds, means we hit an obstacle. Rotate right and continue
-        else {
-            self.guard.direction = rotate_right(&self.guard.direction);
-            match next_indices.last() {
-                None => {}
-                Some((x, y)) => {
-                    self.guard.index = (*x, *y);
+
+        let next_index = get_next_index(
+            self.nrows,
+            self.ncols,
+            self.guard.index,
+            &self.guard.direction,
+        );
+        match next_index {
+            // Out of bounds
+            None => {
+                self.terminated = Some(TerminationCondition::OutOfBounds);
+            }
+            // In bounds, so move the guard appropriately
+            Some((x, y)) => match self.board[x][y] {
+                Square::Obstacle => {
+                    self.guard.direction = rotate_right(&self.guard.direction);
                 }
-            }
-            self.board[self.guard.index.0][self.guard.index.1]
-                .1
-                .insert(self.guard.direction.clone());
+                _ => {
+                    self.guard.index = (x, y);
+                }
+            },
         }
     }
 
     fn run(&mut self) {
-        // Take one step
-        self.step_n_and_check();
-        // If not yet terminated, run again
-        if self.terminated.is_none() {
-            self.run();
+        while self.terminated.is_none() {
+            self.step1();
         }
     }
 
@@ -201,83 +137,74 @@ impl LabMap {
         self.board
             .iter()
             .flatten()
-            .filter(|x| x.0 == Square::Visited)
+            .filter(|x| match x {
+                Square::Obstacle => false,
+                Square::NotObstacle(visited) => !visited.is_empty(),
+            })
             .count()
     }
 }
 
-fn parse_input(input: &str) -> LabMap {
-    fn parse_char(input: char) -> (Square, Option<Direction>) {
-        match input {
-            '#' => (Square::Obstacle, None),
-            '.' => (Square::NotVisited, None),
-            '^' => (Square::Visited, Some(Direction::Up)),
-            'v' => (Square::Visited, Some(Direction::Down)),
-            '<' => (Square::Visited, Some(Direction::Left)),
-            '>' => (Square::Visited, Some(Direction::Right)),
-            _ => panic!("Invalid character in input"),
+impl From<&str> for LabMap {
+    fn from(input: &str) -> Self {
+        fn parse_char(input: char) -> (Square, Option<Direction>) {
+            match input {
+                '#' => (Square::Obstacle, None),
+                '.' => (Square::NotObstacle(HashSet::new()), None),
+                '^' => (Square::NotObstacle(HashSet::new()), Some(Direction::Up)),
+                'v' => (Square::NotObstacle(HashSet::new()), Some(Direction::Down)),
+                '<' => (Square::NotObstacle(HashSet::new()), Some(Direction::Left)),
+                '>' => (Square::NotObstacle(HashSet::new()), Some(Direction::Right)),
+                _ => panic!("Invalid character in input"),
+            }
         }
-    }
-    let mut board = Vec::new();
-    let mut guard = None;
-    let mut nrows = 0;
-    let mut ncols = 0;
-    for (i, line) in input.lines().enumerate() {
-        let mut row = Vec::new();
-        for (j, c) in line.chars().enumerate() {
-            let (square, dir) = parse_char(c);
-            row.push((square, HashSet::new()));
-            // Check for a guard
-            if let Some(d) = dir {
-                assert!(guard.is_none(), "Multiple guards in input");
-                guard = Some(Guard {
-                    direction: d.clone(),
-                    index: (i, j),
-                });
-                row[j].1.insert(d);
-            };
-            ncols = j + 1;
+        let mut board = Vec::new();
+        let mut guard = None;
+        let mut nrows = 0;
+        let mut ncols = 0;
+        for (i, line) in input.lines().enumerate() {
+            let mut row = Vec::new();
+            for (j, c) in line.chars().enumerate() {
+                let (square, maybe_guard_dir) = parse_char(c);
+                // Check for a guard
+                match maybe_guard_dir {
+                    None => {}
+                    Some(d) => {
+                        assert!(guard.is_none(), "Multiple guards in input");
+                        guard = Some(Guard {
+                            direction: d.clone(),
+                            index: (i, j),
+                        });
+                    }
+                };
+                row.push(square);
+                ncols = j + 1;
+            }
+            nrows += 1;
+            board.push(row);
         }
-        nrows += 1;
-        board.push(row);
-    }
-    match guard {
-        None => panic!("No guard in input"),
-        Some(g) => LabMap {
-            board,
-            nrows,
-            ncols,
-            guard: g,
-            terminated: None,
-        },
+        match guard {
+            None => panic!("No guard in input"),
+            Some(g) => LabMap {
+                board,
+                nrows,
+                ncols,
+                guard: g,
+                terminated: None,
+            },
+        }
     }
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
-    let mut map = parse_input(input);
+    let mut map: LabMap = input.into();
     map.run();
     Some(map.count_visited() as u32)
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    let map = parse_input(input);
+    let map: LabMap = input.into();
     let mut n_loops = 0;
-    // // This is inefficient as it checks every single square
-    // for (i, j) in iproduct!(0..map.nrows, 0..map.ncols) {
-    //     if map.map[i][j].0 == Square::NotVisited {
-    //         let mut map = map.clone();
-    //         map.map[i][j].0 = Square::Obstacle;
-    //         let termination_condition = run(map).terminated;
-    //         if termination_condition == TerminationCondition::HitLoop {
-    //             println!("Loop detected at ({}, {})", i, j);
-    //             n_loops += 1;
-    //         }
-    //     }
-    // }
-
-    // This is somewhat more efficient. It takes about 19.1 s with the dev
-    // profile, but around 1.4 s with release profile. I suspect that the
-    // algorithm still isn't optimal, but eh.
 
     // Run the map once to get the trajectory. We use this to determine the
     // set of possible locations where adding an obstacle could affect the
@@ -286,24 +213,27 @@ pub fn part_two(input: &str) -> Option<u32> {
     final_map.run();
     let mut possible_obstacles = HashSet::new();
     for (i, j) in iproduct!(0..final_map.nrows, 0..final_map.ncols) {
-        if let (Square::Visited, dirs) = &final_map.board[i][j] {
+        if let Square::NotObstacle(dirs) = &final_map.board[i][j] {
             for dir in dirs {
-                let possible_obstacle_index = get_next_index(final_map.nrows, final_map.ncols, (i, j), dir);
+                let possible_obstacle_index =
+                    get_next_index(final_map.nrows, final_map.ncols, (i, j), dir);
                 if let Some((x, y)) = possible_obstacle_index {
-                    if final_map.board[x][y].0 != Square::Obstacle {
+                    if final_map.board[x][y] != Square::Obstacle {
                         possible_obstacles.insert((x, y));
                     }
                 }
             }
         }
     }
+    // println!("{:?}", possible_obstacles);
+
     // Then we iterate through that set, instead of the entire map
     for (i, j) in possible_obstacles {
+        // println!("Testing ({}, {})", i, j);
         let mut new_map = map.clone();
-        new_map.board[i][j].0 = Square::Obstacle;
+        new_map.board[i][j] = Square::Obstacle;
         new_map.run();
         if new_map.terminated == Some(TerminationCondition::HitLoop) {
-            // println!("Loop detected at ({}, {})", i, j);
             n_loops += 1;
         }
     }
