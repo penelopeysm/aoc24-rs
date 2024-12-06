@@ -5,8 +5,17 @@ use std::collections::HashSet;
 
 #[derive(Clone, PartialEq)]
 enum Square {
-    NotObstacle(HashSet<Direction>),
+    NotObstacle(HashSet<Direction>), // Directions already visited
     Obstacle,
+}
+
+impl Square {
+    fn has_been_visited(&self) -> bool {
+        match self {
+            Square::Obstacle => false,
+            Square::NotObstacle(visited) => !visited.is_empty(),
+        }
+    }
 }
 
 #[derive(PartialEq, Hash, Eq, Clone)]
@@ -79,7 +88,7 @@ fn rotate_right(dir: &Direction) -> Direction {
 #[derive(Clone)]
 struct LabMap {
     board: Vec<Vec<Square>>,
-    nrows: usize,
+    nrows: usize, // Just to avoid recomputation
     ncols: usize,
     guard: Guard,
     terminated: Option<TerminationCondition>,
@@ -137,10 +146,7 @@ impl LabMap {
         self.board
             .iter()
             .flatten()
-            .filter(|x| match x {
-                Square::Obstacle => false,
-                Square::NotObstacle(visited) => !visited.is_empty(),
-            })
+            .filter(|x| x.has_been_visited())
             .count()
     }
 }
@@ -160,8 +166,6 @@ impl From<&str> for LabMap {
         }
         let mut board = Vec::new();
         let mut guard = None;
-        let mut nrows = 0;
-        let mut ncols = 0;
         for (i, line) in input.lines().enumerate() {
             let mut row = Vec::new();
             for (j, c) in line.chars().enumerate() {
@@ -177,18 +181,20 @@ impl From<&str> for LabMap {
                         });
                     }
                 };
+                // We don't need to set the visited state for the initial square, because step1()
+                // will do it for us on the first iteration
                 row.push(square);
-                ncols = j + 1;
             }
-            nrows += 1;
             board.push(row);
         }
+        let nrows = &board.len();
+        let ncols = &board[0].len();
         match guard {
             None => panic!("No guard in input"),
             Some(g) => LabMap {
                 board,
-                nrows,
-                ncols,
+                nrows: *nrows,
+                ncols: *ncols,
                 guard: g,
                 terminated: None,
             },
@@ -204,32 +210,19 @@ pub fn part_one(input: &str) -> Option<u32> {
 
 pub fn part_two(input: &str) -> Option<u32> {
     let map: LabMap = input.into();
-    let mut n_loops = 0;
 
     // Run the map once to get the trajectory. We use this to determine the
     // set of possible locations where adding an obstacle could affect the
     // trajectory.
     let mut final_map = map.clone();
     final_map.run();
-    let mut possible_obstacles = HashSet::new();
-    for (i, j) in iproduct!(0..final_map.nrows, 0..final_map.ncols) {
-        if let Square::NotObstacle(dirs) = &final_map.board[i][j] {
-            for dir in dirs {
-                let possible_obstacle_index =
-                    get_next_index(final_map.nrows, final_map.ncols, (i, j), dir);
-                if let Some((x, y)) = possible_obstacle_index {
-                    if final_map.board[x][y] != Square::Obstacle {
-                        possible_obstacles.insert((x, y));
-                    }
-                }
-            }
-        }
-    }
-    // println!("{:?}", possible_obstacles);
+    let possible_obstacles: HashSet<_> = iproduct!(0..final_map.nrows, 0..final_map.ncols)
+        .filter(|(i, j)| final_map.board[*i][*j].has_been_visited())
+        .collect();
 
     // Then we iterate through that set, instead of the entire map
+    let mut n_loops = 0;
     for (i, j) in possible_obstacles {
-        // println!("Testing ({}, {})", i, j);
         let mut new_map = map.clone();
         new_map.board[i][j] = Square::Obstacle;
         new_map.run();
@@ -237,7 +230,6 @@ pub fn part_two(input: &str) -> Option<u32> {
             n_loops += 1;
         }
     }
-
     Some(n_loops)
 }
 
