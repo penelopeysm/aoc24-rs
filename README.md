@@ -33,21 +33,27 @@ nvim src/bin/{day}.rs
 ```
 
 Test the solution against the example input.
-(This can't be automatically downloaded because the example input is part of the puzzle text.)
+(The example input is part of the puzzle text, so can't be automatically extracted.)
 
 ```sh
-# first download the input to data/examples/{day}.txt
+# first copy the input to data/examples/{day}.txt
 cargo test --bin {day}
 ```
 
-Run the solution:
+Run the solution (using the release flag if you want to feel good about performance):
 
 ```sh
-cargo solve {day}
+cargo solve {day} [--release]
 ```
 
 Submit the solution:
 
 ```sh
-cargo solve {day} --submit {part}
+cargo solve {day} [--release] --submit {part}
+```
+
+Benchmark:
+
+```sh
+cargo time {day}
 ```
