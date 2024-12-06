@@ -1,11 +1,11 @@
 advent_of_code::solution!(6);
 
 use itertools::iproduct;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq)]
 enum Square {
-    NotObstacle(HashSet<Direction>), // Directions already visited
+    NotObstacle(BTreeSet<Direction>), // Directions already visited
     Obstacle,
 }
 
@@ -18,7 +18,7 @@ impl Square {
     }
 }
 
-#[derive(PartialEq, Hash, Eq, Clone)]
+#[derive(PartialEq, Hash, Eq, PartialOrd, Ord, Clone)]
 enum Direction {
     Up,
     Down,
@@ -173,13 +173,16 @@ impl LabMap {
 impl From<&str> for LabMap {
     fn from(input: &str) -> Self {
         fn parse_char(input: char) -> (Square, Option<Direction>) {
+            fn not_obstacle() -> Square {
+                Square::NotObstacle(BTreeSet::new())
+            }
             match input {
                 '#' => (Square::Obstacle, None),
-                '.' => (Square::NotObstacle(HashSet::new()), None),
-                '^' => (Square::NotObstacle(HashSet::new()), Some(Direction::Up)),
-                'v' => (Square::NotObstacle(HashSet::new()), Some(Direction::Down)),
-                '<' => (Square::NotObstacle(HashSet::new()), Some(Direction::Left)),
-                '>' => (Square::NotObstacle(HashSet::new()), Some(Direction::Right)),
+                '.' => (not_obstacle(), None),
+                '^' => (not_obstacle(), Some(Direction::Up)),
+                'v' => (not_obstacle(), Some(Direction::Down)),
+                '<' => (not_obstacle(), Some(Direction::Left)),
+                '>' => (not_obstacle(), Some(Direction::Right)),
                 _ => panic!("Invalid character in input"),
             }
         }
@@ -187,15 +190,15 @@ impl From<&str> for LabMap {
         let mut guard = None;
         for (i, line) in input.lines().enumerate() {
             let mut row = Vec::new();
-            for (j, c) in line.chars().enumerate() {
-                let (square, maybe_guard_dir) = parse_char(c);
+            for (j, char) in line.chars().enumerate() {
+                let (square, maybe_guard_dir) = parse_char(char);
                 // Check for a guard
                 match maybe_guard_dir {
                     None => {}
                     Some(d) => {
                         assert!(guard.is_none(), "Multiple guards in input");
                         guard = Some(Guard {
-                            direction: d.clone(),
+                            direction: d,
                             index: (i, j),
                         });
                     }
@@ -235,7 +238,7 @@ pub fn part_two(input: &str) -> Option<u32> {
     // trajectory.
     let mut final_map = map.clone();
     final_map.run(true);
-    let possible_obstacles: HashSet<_> = iproduct!(0..final_map.nrows, 0..final_map.ncols)
+    let possible_obstacles: BTreeSet<_> = iproduct!(0..final_map.nrows, 0..final_map.ncols)
         .filter(|(i, j)| final_map.board[*i][*j].has_been_visited())
         .collect();
 
