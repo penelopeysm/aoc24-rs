@@ -4,7 +4,7 @@ use itertools::iproduct;
 
 #[derive(Clone, PartialEq)]
 enum Square {
-    NotObstacle(u32), // Number of directions already visited
+    NotObstacle(u32), // Number of times this square has been visited
     Obstacle,
 }
 
@@ -94,18 +94,25 @@ struct LabMap {
 }
 
 impl LabMap {
+    // Increment the counter for the square the guard is currently on.
     fn track_direction(&mut self) {
         if let Square::NotObstacle(visited) =
             &mut self.board[self.guard.index.0][self.guard.index.1]
         {
-            // By the pigeonhole principle, if we've visited a square more
-            // than 4 times, at least 2 of those times must have been in
-            // the same direction. This means we've hit a loop.
+            // By the pigeonhole principle, if we've visited a square more than 4 times, at least 2
+            // of those times must have been in the same direction. This means we've hit a loop.
+            //
+            // In fact, if the square being tracked is next to an obstacle, it suffices to check
+            // *visited > 3 because it's impossible to visit a square next to an obstacle in all
+            // four directions. So, for part 2 we could optimise this slightly, but it's not
+            // generalisable and leads to negligible speedup, so I'll leave it.
             if *visited > 4 {
                 self.terminated = Some(TerminationCondition::HitLoop);
             } else {
                *visited += 1;
             }
+        } else {
+            panic!("Guard is on an obstacle");
         }
     }
 
