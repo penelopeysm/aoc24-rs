@@ -29,7 +29,7 @@ fn parse_input(input: &str) -> Vec<u64> {
 }
 
 // Return the number of stones after n blinks, starting from a single stone with value x
-fn get_len_after_n_blinks(x: u64, n: u64, storage: &mut BTreeMap<(u64, u64), u64>) -> u64 {
+fn get_len_after_n_blinks(x: u64, n: u8, storage: &mut BTreeMap<(u64, u8), u64>) -> u64 {
     if n == 0 {
         return 1;
     }
@@ -61,7 +61,7 @@ fn get_len_after_n_blinks(x: u64, n: u64, storage: &mut BTreeMap<(u64, u64), u64
 
 pub fn part_one(input: &str) -> Option<u64> {
     let xs = parse_input(input);
-    let mut storage: BTreeMap<(u64, u64), u64> = BTreeMap::new();
+    let mut storage: BTreeMap<(u64, u8), u64> = BTreeMap::new();
     Some(xs.into_iter().fold(0, |acc, x| {
         acc + get_len_after_n_blinks(x, 25, &mut storage)
     }))
@@ -69,7 +69,7 @@ pub fn part_one(input: &str) -> Option<u64> {
 
 pub fn part_two(input: &str) -> Option<u64> {
     let xs = parse_input(input);
-    let mut storage: BTreeMap<(u64, u64), u64> = BTreeMap::new();
+    let mut storage: BTreeMap<(u64, u8), u64> = BTreeMap::new();
     Some(xs.into_iter().fold(0, |acc, x| {
         acc + get_len_after_n_blinks(x, 75, &mut storage)
     }))
