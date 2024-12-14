@@ -95,10 +95,7 @@ pub fn part_one(input: &str) -> Option<u64> {
         .split("\n\n")
         .map(LinearEquations::from)
         .collect::<Vec<_>>();
-    let total_price = equations
-        .iter()
-        .map(LinearEquations::price)
-        .sum();
+    let total_price = equations.iter().map(LinearEquations::price).sum();
     Some(total_price)
 }
 
@@ -115,10 +112,7 @@ pub fn part_two(input: &str) -> Option<u64> {
             c5: le.c5 + 10000000000000,
         })
         .collect::<Vec<_>>();
-    let total_price = equations
-        .iter()
-        .map(LinearEquations::price)
-        .sum();
+    let total_price = equations.iter().map(LinearEquations::price).sum();
     Some(total_price)
 }
 
