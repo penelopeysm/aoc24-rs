@@ -48,8 +48,8 @@ enum Part {
 }
 
 impl Game {
-    // If the box at `box_index` can be moved, this returns a Vec of indices of boxes that need to
-    // be moved (including the one passed to this function). If it can't, returns an empty Vec.
+    // If the box at `box_index` can be moved, this returns Some(Vec of indices of boxes that need
+    // to be moved) (including the one passed to this function). If it can't, returns None.
     fn get_boxes_to_move_incl(
         &mut self,
         box_index: (usize, usize),
@@ -102,9 +102,10 @@ impl Game {
         this_index: (usize, usize),
         dir: Dir,
     ) -> Option<Vec<(usize, usize)>> {
-        // The recursive behaviour of this function is exactly analogous to that of part 1
-        // (get_boxes_to_move_incl_p1()), but with the added complexity that we need to
-        // be more careful about where the boxes that can be moved are placed.
+        // The recursive behaviour of this function is, at its core, the same as that of part 1
+        // (get_boxes_to_move_incl_p1()). It checks what's in front of the box, sees if those
+        // are themselves movable, and returns a list of all boxes that need to be moved. However,
+        // we need to be careful about which indices to check.
         match dir {
             Dir::W => {
                 // For example, when moving west, we need to check whether next_index is a
