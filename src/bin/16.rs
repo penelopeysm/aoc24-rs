@@ -152,10 +152,13 @@ where
             nodes_on_path.insert(end_node.clone());
             let mut nodes_to_traverse = vec![end_node];
             while let Some(n) = nodes_to_traverse.pop() {
-                prev_nodes[&n].clone().into_iter().for_each(|prev_node| {
-                    nodes_on_path.insert(prev_node.clone());
-                    nodes_to_traverse.push(prev_node);
-                });
+                // If prev_nodes[n] doesn't exist, means we already checked that square
+                if let Some(v) = prev_nodes.remove(n) {
+                    v.into_iter().for_each(|prev_node| {
+                        nodes_on_path.insert(prev_node.clone());
+                        nodes_to_traverse.push(prev_node);
+                    });
+                }
             }
             nodes_on_path
         };
