@@ -35,69 +35,6 @@ impl Dir {
     }
 }
 
-// // Get the cost of travelling from n1 to n2
-// fn _get_edge_weight(n1: &Node, n2: &Node) -> Option<u32> {
-//     // Rotating
-//     if n1.i == n2.i && n1.j == n2.j {
-//         match (n1.dir, n2.dir) {
-//             (Dir::N, Dir::E) => Some(1000),
-//             (Dir::N, Dir::W) => Some(1000),
-//             (Dir::E, Dir::N) => Some(1000),
-//             (Dir::E, Dir::S) => Some(1000),
-//             (Dir::S, Dir::E) => Some(1000),
-//             (Dir::S, Dir::W) => Some(1000),
-//             (Dir::W, Dir::N) => Some(1000),
-//             (Dir::W, Dir::S) => Some(1000),
-//             _ => None,
-//         }
-//     }
-//     // Traavelling
-//     else if (n1.i == n2.i && n1.j + 1 == n2.j && n1.dir == n2.dir && n1.dir == Dir::E)
-//         || (n1.i == n2.i && n1.j == n2.j + 1 && n1.dir == n2.dir && n1.dir == Dir::W)
-//         || (n1.i + 1 == n2.i && n1.j == n2.j && n1.dir == n2.dir && n1.dir == Dir::S)
-//         || (n1.i == n2.i + 1 && n1.j == n2.j && n1.dir == n2.dir && n1.dir == Dir::N)
-//     {
-//         Some(1)
-//     } else {
-//         None
-//     }
-// }
-
-// // Same but about 3x faster
-// fn get_edge_weight2(n1: &Node, n2: &Node) -> Option<u32> {
-//     if n1.i == n2.i && n1.j + 1 == n2.j {
-//         match (n1.dir, n2.dir) {
-//             (Dir::E, Dir::E) => Some(1),
-//             (Dir::N, Dir::E) => Some(1001),
-//             (Dir::S, Dir::E) => Some(1001),
-//             _ => None,
-//         }
-//     } else if n1.i == n2.i && n1.j == n2.j + 1 {
-//         match (n1.dir, n2.dir) {
-//             (Dir::W, Dir::W) => Some(1),
-//             (Dir::N, Dir::W) => Some(1001),
-//             (Dir::S, Dir::W) => Some(1001),
-//             _ => None,
-//         }
-//     } else if n1.i + 1 == n2.i && n1.j == n2.j {
-//         match (n1.dir, n2.dir) {
-//             (Dir::S, Dir::S) => Some(1),
-//             (Dir::E, Dir::S) => Some(1001),
-//             (Dir::W, Dir::S) => Some(1001),
-//             _ => None,
-//         }
-//     } else if n1.i == n2.i + 1 && n1.j == n2.j {
-//         match (n1.dir, n2.dir) {
-//             (Dir::N, Dir::N) => Some(1),
-//             (Dir::E, Dir::N) => Some(1001),
-//             (Dir::W, Dir::N) => Some(1001),
-//             _ => None,
-//         }
-//     } else {
-//         None
-//     }
-// }
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Pos {
     i: usize,
@@ -154,7 +91,8 @@ struct Grid {
 type NodeIndex = usize;
 
 struct Graph {
-    edges: Vec<(NodeIndex, NodeIndex, u32)>,
+    // Map of starting node -> (ending node, weight)
+    edges: HashMap<NodeIndex, Vec<(NodeIndex, u32)>>,
     start_idx: NodeIndex,
     end_idxs: Vec<NodeIndex>,
     n_nodes: usize,
@@ -189,7 +127,7 @@ impl Grid {
 
     fn to_graph(&self) -> Graph {
         let (all_nodes_and_idxs, all_idxs_and_poses) = self.all_nodes_and_idxs();
-        let mut all_edges = Vec::new();
+        let mut all_edges = HashMap::new();
         let mut start_idx = None;
         let mut end_idxs = Vec::new();
 
@@ -201,14 +139,12 @@ impl Grid {
                 end_idxs.push(*idx);
             }
             // Collect edges
-            for (next_node, weight) in node.edges(self) {
-                match all_nodes_and_idxs.get(&next_node) {
-                    Some(next_idx) => {
-                        all_edges.push((*idx, *next_idx, weight));
-                    }
-                    None => panic!("Shouldn't happen"),
-                }
-            }
+            let edges = node
+                .edges(self)
+                .into_iter()
+                .map(|(next_node, weight)| (all_nodes_and_idxs[&next_node], weight))
+                .collect::<Vec<_>>();
+            all_edges.insert(*idx, edges);
         }
 
         Graph {
@@ -250,23 +186,21 @@ impl Grid {
                 break;
             }
             // Extract the edges that begin at the node of interest
-            graph.edges.iter().for_each(|(n1, n2, weight)| {
-                if *n1 == n {
-                    let distance_through_n = distances[n] + weight;
-                    match distance_through_n.cmp(&distances[*n2]) {
-                        // If the distance to the new node is less than the current minimum
-                        Ordering::Less => {
-                            // Update the distance, and set the previous node to this one
-                            distances[*n2] = distance_through_n;
-                            prev_nodes[*n2] = vec![n];
-                        }
-                        Ordering::Equal => {
-                            // If it's equal, then we need to keep track of it as one of the
-                            // possible paths
-                            prev_nodes[*n2].push(n);
-                        }
-                        _ => (),
+            graph.edges[&n].iter().for_each(|(n2, weight)| {
+                let distance_through_n = distances[n] + weight;
+                match distance_through_n.cmp(&distances[*n2]) {
+                    // If the distance to the new node is less than the current minimum
+                    Ordering::Less => {
+                        // Update the distance, and set the previous node to this one
+                        distances[*n2] = distance_through_n;
+                        prev_nodes[*n2] = vec![n];
                     }
+                    Ordering::Equal => {
+                        // If it's equal, then we need to keep track of it as one of the
+                        // possible paths
+                        prev_nodes[*n2].push(n);
+                    }
+                    _ => (),
                 }
             });
         }
