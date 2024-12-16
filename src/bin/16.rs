@@ -87,21 +87,40 @@ struct Graph {
 }
 
 impl Grid {
-    // Get all possible nodes
+    // Because our 'moves' consist of turning first BEFORE walking forward, there is no way we can
+    // enter a state where our back is facing a wall. We can thus get rid of all such nodes at this
+    // stage, so that we don't bother constructing their edges. (This trims almost half the nodes,
+    // and two-thirds of the edges)
+    // This isn't as much of a time save as it sounds like, because the algorithm will never get
+    // into such a state where it tries to use those edges (trying to move from an unreachable node
+    // corresponds to the point where the popped distance from the priority queue is u32::MAX), but
+    // it does shave a few milliseconds off
+    fn get_valid_nodes_from_pos(&self, pos: &Pos) -> Vec<Node> {
+        let mut nodes = Vec::new();
+        if self.pos.contains(&pos.next(Dir::S)) {
+            nodes.push(Node::new(*pos, Dir::N));
+        }
+        if self.pos.contains(&pos.next(Dir::N)) {
+            nodes.push(Node::new(*pos, Dir::S));
+        }
+        if self.pos.contains(&pos.next(Dir::E)) {
+            nodes.push(Node::new(*pos, Dir::W));
+        }
+        // But for the starting position, we must retain East as a valid node
+        if self.pos.contains(&pos.next(Dir::W)) || pos == &self.start_pos {
+            nodes.push(Node::new(*pos, Dir::E));
+        }
+        nodes
+    }
+
+    // Get all possible nodes from the list of positions
     fn all_nodes_and_idxs(&self) -> (HashMap<Node, NodeIndex>, HashMap<NodeIndex, Pos>) {
         let mut m = HashMap::new();
         let mut n = HashMap::new();
         let mut counter = 0;
         self.pos
             .iter()
-            .flat_map(|pos| {
-                vec![
-                    Node::new(*pos, Dir::N),
-                    Node::new(*pos, Dir::S),
-                    Node::new(*pos, Dir::E),
-                    Node::new(*pos, Dir::W),
-                ]
-            })
+            .flat_map(|pos| self.get_valid_nodes_from_pos(pos))
             .for_each(|node| {
                 m.insert(node, counter);
                 n.insert(counter, node.pos);
@@ -110,16 +129,20 @@ impl Grid {
         (m, n)
     }
 
+    // Get all possible edges from a node, along with their weights
     fn edges(&self, node: &Node) -> Vec<(Node, u32)> {
         let mut edges = Vec::new();
+        // Walk forward
         let next_pos = node.pos.next(node.dir);
         if self.pos.contains(&next_pos) {
             edges.push((Node::new(next_pos, node.dir), 1));
         }
+        // Rotate 90 then walk forward
         let next_pos = node.pos.next(node.dir.clockwise());
         if self.pos.contains(&next_pos) {
             edges.push((Node::new(next_pos, node.dir.clockwise()), 1001));
         }
+        // Rotate -90 then walk forward
         let next_pos = node.pos.next(node.dir.anticlockwise());
         if self.pos.contains(&next_pos) {
             edges.push((Node::new(next_pos, node.dir.anticlockwise()), 1001));
@@ -149,6 +172,9 @@ impl Grid {
             all_edges.insert(*idx, edges);
         }
 
+        // println!("{:?} nodes", all_nodes_and_idxs.len());
+        // println!("{:?} edges", all_edges.values().map(|v| v.len()).sum::<usize>());
+
         Graph {
             edges: all_edges,
             start_idx: *start_idx.expect("No start node found"),
@@ -158,28 +184,29 @@ impl Grid {
         }
     }
 
+    // Dijsktra's algorithm
     fn solve(&self, part: Part) -> u32 {
-        // Populate distances table, with 0 for the starting node and a large number for all others
         let graph = self.to_graph();
+        // Populate distances table, with 0 for the starting node and a large number for all others
         let mut distances = vec![u32::MAX; graph.n_nodes];
-        let mut prev_nodes = vec![Vec::<NodeIndex>::new(); graph.n_nodes];
         distances[graph.start_idx] = 0;
+        // prev_nodes[idx] is a vector of NodeIndex's, representing the previous step on the
+        // shortest path(s) to the node with index idx
+        let mut prev_nodes = vec![Vec::<NodeIndex>::new(); graph.n_nodes];
 
         let mut unvisited = PriorityQueue::new();
         for (i, dist) in distances.iter().enumerate() {
             unvisited.push(i, Reverse(*dist));
         }
 
-        while !unvisited.is_empty() {
-            // Get the node with the smallest distance
-            let (n, Reverse(d)) = unvisited.pop().unwrap();
-            // Remove that node
+        // Remove the node with the smallest distance
+        while let Some((n, Reverse(d))) = unvisited.pop() {
             unvisited.remove(&n);
             // If the remaining nodes are unreachable, break
             if d == u32::MAX {
                 break;
             }
-            // Extract the edges that begin at the node of interest
+            // Retrieve the edges that begin at the node of interest
             graph.edges[&n].iter().for_each(|(n2, weight)| {
                 let distance_through_n = d + weight;
                 match distance_through_n.cmp(&distances[*n2]) {
@@ -275,7 +302,10 @@ impl From<&str> for Grid {
                     p.next(Dir::S),
                     p.next(Dir::E),
                     p.next(Dir::W),
-                ].into_iter().filter(|p| legal_points.contains(p)).count();
+                ]
+                .into_iter()
+                .filter(|p| legal_points.contains(p))
+                .count();
                 if n_neighbours < 2 {
                     no_dead_ends_found = false;
                     legal_points.remove(p);
