@@ -64,27 +64,11 @@ impl Node {
     fn new(pos: Pos, dir: Dir) -> Self {
         Node { pos, dir }
     }
-    fn edges(&self, grid: &Grid) -> Vec<(Node, u32)> {
-        let mut edges = Vec::new();
-        let next_pos = self.pos.next(self.dir);
-        if grid.pos.contains(&next_pos) {
-            edges.push((Node::new(next_pos, self.dir), 1));
-        }
-        let next_pos = self.pos.next(self.dir.clockwise());
-        if grid.pos.contains(&next_pos) {
-            edges.push((Node::new(next_pos, self.dir.clockwise()), 1001));
-        }
-        let next_pos = self.pos.next(self.dir.anticlockwise());
-        if grid.pos.contains(&next_pos) {
-            edges.push((Node::new(next_pos, self.dir.anticlockwise()), 1001));
-        }
-        edges
-    }
 }
 
 #[derive(Debug)]
 struct Grid {
-    pos: Vec<Pos>,
+    pos: HashSet<Pos>,
     start_pos: Pos,
     end_pos: Pos,
 }
@@ -126,6 +110,23 @@ impl Grid {
         (m, n)
     }
 
+    fn edges(&self, node: &Node) -> Vec<(Node, u32)> {
+        let mut edges = Vec::new();
+        let next_pos = node.pos.next(node.dir);
+        if self.pos.contains(&next_pos) {
+            edges.push((Node::new(next_pos, node.dir), 1));
+        }
+        let next_pos = node.pos.next(node.dir.clockwise());
+        if self.pos.contains(&next_pos) {
+            edges.push((Node::new(next_pos, node.dir.clockwise()), 1001));
+        }
+        let next_pos = node.pos.next(node.dir.anticlockwise());
+        if self.pos.contains(&next_pos) {
+            edges.push((Node::new(next_pos, node.dir.anticlockwise()), 1001));
+        }
+        edges
+    }
+
     fn to_graph(&self) -> Graph {
         let (all_nodes_and_idxs, all_idxs_and_poses) = self.all_nodes_and_idxs();
         let mut all_edges = HashMap::new();
@@ -140,8 +141,8 @@ impl Grid {
                 end_idxs.push(*idx);
             }
             // Collect edges
-            let edges = node
-                .edges(self)
+            let edges = self
+                .edges(node)
                 .into_iter()
                 .map(|(next_node, weight)| (all_nodes_and_idxs[&next_node], weight))
                 .collect::<Vec<_>>();
@@ -233,7 +234,8 @@ impl Grid {
 
 impl From<&str> for Grid {
     fn from(input: &str) -> Self {
-        let mut legal_points = Vec::new();
+        // Parse input String
+        let mut legal_points = HashSet::new();
         let mut start = None;
         let mut end = None;
         for (i, line) in input.lines().enumerate() {
@@ -241,23 +243,53 @@ impl From<&str> for Grid {
                 let pos = Pos::new(i, j);
                 match char {
                     '#' => continue,
-                    '.' => legal_points.push(pos),
+                    '.' => {
+                        legal_points.insert(pos);
+                    }
                     'E' => {
-                        legal_points.push(pos);
+                        legal_points.insert(pos);
                         end = Some(pos);
                     }
                     'S' => {
-                        legal_points.push(pos);
+                        legal_points.insert(pos);
                         start = Some(pos);
                     }
                     _ => panic!("Invalid character in input"),
                 }
             }
         }
+        let start_pos = start.expect("No start point found");
+        let end_pos = end.expect("No end point found");
+
+        // Get rid of dead ends. We detect dead ends by the fact that they only have one neighbour
+        // in the grid. However, we must make sure to exclude the start and end points from this
+        loop {
+            let mut no_dead_ends_found = true;
+            let remaining_points = legal_points.clone();
+            for p in remaining_points.iter() {
+                if *p == start_pos || *p == end_pos {
+                    continue;
+                }
+                let n_neighbours = [
+                    p.next(Dir::N),
+                    p.next(Dir::S),
+                    p.next(Dir::E),
+                    p.next(Dir::W),
+                ].into_iter().filter(|p| legal_points.contains(p)).count();
+                if n_neighbours < 2 {
+                    no_dead_ends_found = false;
+                    legal_points.remove(p);
+                }
+            }
+            if no_dead_ends_found {
+                break;
+            }
+        }
+
         Grid {
             pos: legal_points,
-            start_pos: start.expect("No start point found"),
-            end_pos: end.expect("No end point found"),
+            start_pos,
+            end_pos,
         }
     }
 }
