@@ -123,28 +123,22 @@ struct Node {
     dir: Dir,
 }
 impl Node {
-    fn new(i: usize, j: usize, dir: Dir) -> Self {
-        Node {
-            pos: Pos::new(i, j),
-            dir,
-        }
-    }
-    fn new_pos(pos: Pos, dir: Dir) -> Self {
+    fn new(pos: Pos, dir: Dir) -> Self {
         Node { pos, dir }
     }
     fn edges(&self, grid: &Grid) -> Vec<(Node, u32)> {
         let mut edges = Vec::new();
         let next_pos = self.pos.next(self.dir);
         if grid.pos.contains(&next_pos) {
-            edges.push((Node::new_pos(next_pos, self.dir), 1));
+            edges.push((Node::new(next_pos, self.dir), 1));
         }
         let next_pos = self.pos.next(self.dir.clockwise());
         if grid.pos.contains(&next_pos) {
-            edges.push((Node::new_pos(next_pos, self.dir.clockwise()), 1001));
+            edges.push((Node::new(next_pos, self.dir.clockwise()), 1001));
         }
         let next_pos = self.pos.next(self.dir.anticlockwise());
         if grid.pos.contains(&next_pos) {
-            edges.push((Node::new_pos(next_pos, self.dir.anticlockwise()), 1001));
+            edges.push((Node::new(next_pos, self.dir.anticlockwise()), 1001));
         }
         edges
     }
@@ -164,6 +158,8 @@ struct Graph {
     start_idx: NodeIndex,
     end_idxs: Vec<NodeIndex>,
     n_nodes: usize,
+    // We need to keep track of which nodes belong to the same square, because we need to
+    // remove duplicate squares later when finding the path
     idxs_to_pos: HashMap<NodeIndex, Pos>,
 }
 
@@ -177,10 +173,10 @@ impl Grid {
             .iter()
             .flat_map(|pos| {
                 vec![
-                    Node::new_pos(*pos, Dir::N),
-                    Node::new_pos(*pos, Dir::S),
-                    Node::new_pos(*pos, Dir::E),
-                    Node::new_pos(*pos, Dir::W),
+                    Node::new(*pos, Dir::N),
+                    Node::new(*pos, Dir::S),
+                    Node::new(*pos, Dir::E),
+                    Node::new(*pos, Dir::W),
                 ]
             })
             .for_each(|node| {
@@ -233,34 +229,40 @@ impl Grid {
 
         let mut unvisited = (0..graph.n_nodes).collect::<HashSet<usize>>();
         while !unvisited.is_empty() {
-            // Get a node of interest
-            let init = *unvisited
+            // Get the node with the smallest distance
+            let n = unvisited
                 .iter()
-                .next()
-                .expect("Shouldn't happen, we checked the set was not empty");
-            let n = unvisited.iter().fold(init, |acc, idx| {
-                if distances[*idx] < distances[acc] {
-                    *idx
-                } else {
-                    acc
-                }
-            });
+                .fold(None, |maybe_acc, idx| match maybe_acc {
+                    None => Some(*idx),
+                    Some(acc) => {
+                        if distances[*idx] < distances[acc] {
+                            Some(*idx)
+                        } else {
+                            Some(acc)
+                        }
+                    }
+                })
+                .expect("No node found in unvisited -- shouldn't happen");
             // Remove that node
             unvisited.remove(&n);
             // If the remaining nodes are unreachable, break
             if distances[n] == u32::MAX {
                 break;
             }
-            // Extract the edges that touch the node of interest
+            // Extract the edges that begin at the node of interest
             graph.edges.iter().for_each(|(n1, n2, weight)| {
                 if *n1 == n {
                     let distance_through_n = distances[n] + weight;
                     match distance_through_n.cmp(&distances[*n2]) {
+                        // If the distance to the new node is less than the current minimum
                         Ordering::Less => {
+                            // Update the distance, and set the previous node to this one
                             distances[*n2] = distance_through_n;
                             prev_nodes[*n2] = vec![n];
                         }
                         Ordering::Equal => {
+                            // If it's equal, then we need to keep track of it as one of the
+                            // possible paths
                             prev_nodes[*n2].push(n);
                         }
                         _ => (),
@@ -269,7 +271,7 @@ impl Grid {
             });
         }
 
-        // Find the end node with the lowest weight
+        // Find the end node with the lowest distance
         let end_node = graph.end_idxs.iter().fold(graph.end_idxs[0], |acc, idx| {
             if distances[*idx] < distances[acc] {
                 *idx
@@ -282,21 +284,20 @@ impl Grid {
             // For part 1, return the distance to the end node with the lowest weight
             Part::One => distances[end_node],
             Part::Two => {
-                // Find the nodes on the reverse path
-                let mut path = HashSet::new();
-                path.insert(end_node);
+                // For part 2, we need to find the squares on the reverse path. This is a bit
+                // tricky because our path consists of nodes (which contain position + direction),
+                // not just positions. So if we don't remove duplicates, we'll end up
+                // double-counting squares that are visited twice via different directions.
+                let mut positions_on_path = HashSet::<Pos>::new();
+                positions_on_path.insert(graph.idxs_to_pos[&end_node]);
                 let mut nodes_to_traverse = vec![end_node];
                 while let Some(sq) = nodes_to_traverse.pop() {
-                    path.extend(prev_nodes[sq].clone());
-                    nodes_to_traverse.extend(prev_nodes[sq].clone());
+                    prev_nodes[sq].clone().into_iter().for_each(|prev_node| {
+                        positions_on_path.insert(graph.idxs_to_pos[&prev_node]);
+                        nodes_to_traverse.push(prev_node);
+                    });
                 }
-                // Need to deduplicate nodes on the same square
-                let mut poses_on_path = HashSet::new();
-                path.iter().for_each(|node_idx| {
-                    let pos = graph.idxs_to_pos.get(node_idx).expect("Node not found");
-                    poses_on_path.insert(pos);
-                });
-                poses_on_path.len() as u32
+                positions_on_path.len() as u32
             }
         }
     }
