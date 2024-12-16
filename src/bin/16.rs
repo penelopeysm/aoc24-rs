@@ -4,11 +4,7 @@ use priority_queue::PriorityQueue;
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::collections::HashSet;
-
-enum Part {
-    One,
-    Two,
-}
+use std::hash::Hash;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Dir {
@@ -66,24 +62,137 @@ impl Node {
     }
 }
 
+// This represents a truly generic graph of anything.
+//
+// There are no trait bounds here because apparently you have to repeat the trait bounds on the
+// impl block
+struct Graph<T> {
+    nodes: Vec<T>,
+    // Map of starting node -> (ending node, weight)
+    edges: HashMap<T, Vec<(T, u32)>>,
+    start_node: T,
+    end_nodes: Vec<T>,
+}
+
+impl<T> Graph<T>
+where
+    T: std::hash::Hash + PartialEq + Eq + Clone,
+{
+    // Dijsktra's algorithm
+    fn solve(&self) -> (u32, HashSet<T>) {
+        // Distances lookup table, with 0 for the starting node and a large number for all others
+        let mut distances = HashMap::new();
+        // prev_nodes[n] is a vector of Nodes, representing the previous step on the shortest
+        // path(s) to the node n
+        let mut prev_nodes = HashMap::new();
+        // Priority queue to keep track of the unvisited nodes
+        let mut unvisited = PriorityQueue::new();
+
+        // Initialise the collections
+        for node in self.nodes.iter() {
+            let dist = if node == &self.start_node {
+                0
+            } else {
+                u32::MAX
+            };
+            distances.insert(node, dist);
+            unvisited.push(node, Reverse(dist));
+            prev_nodes.insert(node, Vec::new());
+        }
+
+        // Remove the node with the smallest distance
+        while let Some((n, Reverse(d))) = unvisited.pop() {
+            unvisited.remove(&n);
+            // If the remaining nodes are unreachable, break
+            if d == u32::MAX {
+                break;
+            }
+            // Retrieve the edges that begin at the node of interest
+            self.edges[n].iter().for_each(|(n2, weight)| {
+                let distance_through_n = d + weight;
+                match distance_through_n.cmp(&distances[n2]) {
+                    // If the distance to the new node is less than the current minimum
+                    Ordering::Less => {
+                        // Update the distance, and set the previous node to this one
+                        distances.insert(n2, distance_through_n);
+                        unvisited.change_priority(n2, Reverse(distance_through_n));
+                        prev_nodes.insert(n2, vec![n]);
+                    }
+                    Ordering::Equal => {
+                        // If it's equal, then we need to keep track of it as one of the
+                        // possible paths
+                        prev_nodes.entry(n2).and_modify(|v| v.push(n));
+                    }
+                    _ => (),
+                }
+            });
+        }
+
+        // Find the end node with the lowest distance
+        let end_node = self
+            .end_nodes
+            .iter()
+            .fold(None, |maybe_acc, idx| match maybe_acc {
+                None => Some(idx),
+                Some(acc) => {
+                    if distances[idx] < distances[&acc] {
+                        Some(idx)
+                    } else {
+                        Some(acc)
+                    }
+                }
+            })
+            .unwrap();
+
+        // For part 1, return the distance to the end node with the lowest weight
+        let p1_sol = distances[&end_node];
+        // For part 2, return all nodes on the shortest paths to the end node
+        let p2_sol = {
+            let mut nodes_on_path = HashSet::<T>::new();
+            nodes_on_path.insert(end_node.clone());
+            let mut nodes_to_traverse = vec![end_node];
+            while let Some(n) = nodes_to_traverse.pop() {
+                prev_nodes[&n].clone().into_iter().for_each(|prev_node| {
+                    nodes_on_path.insert(prev_node.clone());
+                    nodes_to_traverse.push(prev_node);
+                });
+            }
+            nodes_on_path
+        };
+        (p1_sol, p2_sol)
+    }
+}
+
+impl From<Grid> for Graph<Node> {
+    fn from(grid: Grid) -> Self {
+        let nodes = grid.get_all_nodes();
+        let mut all_edges = HashMap::new();
+        let mut end_nodes = Vec::new();
+        for node in nodes.iter() {
+            if node.pos == grid.end_pos {
+                end_nodes.push(*node);
+            }
+            let edges = grid.edges(node).into_iter().collect::<Vec<_>>();
+            all_edges.insert(*node, edges);
+        }
+
+        // println!("{:?} nodes", all_nodes_and_idxs.len());
+        // println!("{:?} edges", all_edges.values().map(|v| v.len()).sum::<usize>());
+
+        Graph {
+            nodes,
+            edges: all_edges,
+            start_node: Node::new(grid.start_pos, Dir::E),
+            end_nodes,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Grid {
     pos: HashSet<Pos>,
     start_pos: Pos,
     end_pos: Pos,
-}
-
-type NodeIndex = usize;
-
-struct Graph {
-    // Map of starting node -> (ending node, weight)
-    edges: HashMap<NodeIndex, Vec<(NodeIndex, u32)>>,
-    start_idx: NodeIndex,
-    end_idxs: Vec<NodeIndex>,
-    n_nodes: usize,
-    // We need to keep track of which nodes belong to the same square, because we need to
-    // remove duplicate squares later when finding the path
-    idxs_to_pos: HashMap<NodeIndex, Pos>,
 }
 
 impl Grid {
@@ -114,19 +223,11 @@ impl Grid {
     }
 
     // Get all possible nodes from the list of positions
-    fn all_nodes_and_idxs(&self) -> (HashMap<Node, NodeIndex>, HashMap<NodeIndex, Pos>) {
-        let mut m = HashMap::new();
-        let mut n = HashMap::new();
-        let mut counter = 0;
+    fn get_all_nodes(&self) -> Vec<Node> {
         self.pos
             .iter()
             .flat_map(|pos| self.get_valid_nodes_from_pos(pos))
-            .for_each(|node| {
-                m.insert(node, counter);
-                n.insert(counter, node.pos);
-                counter += 1;
-            });
-        (m, n)
+            .collect()
     }
 
     // Get all possible edges from a node, along with their weights
@@ -148,114 +249,6 @@ impl Grid {
             edges.push((Node::new(next_pos, node.dir.anticlockwise()), 1001));
         }
         edges
-    }
-
-    fn to_graph(&self) -> Graph {
-        let (all_nodes_and_idxs, all_idxs_and_poses) = self.all_nodes_and_idxs();
-        let mut all_edges = HashMap::new();
-        let mut start_idx = None;
-        let mut end_idxs = Vec::new();
-
-        for (node, idx) in all_nodes_and_idxs.iter() {
-            if node.pos == self.start_pos && node.dir == Dir::E {
-                start_idx = Some(idx);
-            }
-            if node.pos == self.end_pos {
-                end_idxs.push(*idx);
-            }
-            // Collect edges
-            let edges = self
-                .edges(node)
-                .into_iter()
-                .map(|(next_node, weight)| (all_nodes_and_idxs[&next_node], weight))
-                .collect::<Vec<_>>();
-            all_edges.insert(*idx, edges);
-        }
-
-        // println!("{:?} nodes", all_nodes_and_idxs.len());
-        // println!("{:?} edges", all_edges.values().map(|v| v.len()).sum::<usize>());
-
-        Graph {
-            edges: all_edges,
-            start_idx: *start_idx.expect("No start node found"),
-            end_idxs,
-            n_nodes: all_nodes_and_idxs.len(),
-            idxs_to_pos: all_idxs_and_poses,
-        }
-    }
-
-    // Dijsktra's algorithm
-    fn solve(&self, part: Part) -> u32 {
-        let graph = self.to_graph();
-        // Populate distances table, with 0 for the starting node and a large number for all others
-        let mut distances = vec![u32::MAX; graph.n_nodes];
-        distances[graph.start_idx] = 0;
-        // prev_nodes[idx] is a vector of NodeIndex's, representing the previous step on the
-        // shortest path(s) to the node with index idx
-        let mut prev_nodes = vec![Vec::<NodeIndex>::new(); graph.n_nodes];
-
-        let mut unvisited = PriorityQueue::new();
-        for (i, dist) in distances.iter().enumerate() {
-            unvisited.push(i, Reverse(*dist));
-        }
-
-        // Remove the node with the smallest distance
-        while let Some((n, Reverse(d))) = unvisited.pop() {
-            unvisited.remove(&n);
-            // If the remaining nodes are unreachable, break
-            if d == u32::MAX {
-                break;
-            }
-            // Retrieve the edges that begin at the node of interest
-            graph.edges[&n].iter().for_each(|(n2, weight)| {
-                let distance_through_n = d + weight;
-                match distance_through_n.cmp(&distances[*n2]) {
-                    // If the distance to the new node is less than the current minimum
-                    Ordering::Less => {
-                        // Update the distance, and set the previous node to this one
-                        distances[*n2] = distance_through_n;
-                        unvisited.change_priority(n2, Reverse(distance_through_n));
-                        prev_nodes[*n2] = vec![n];
-                    }
-                    Ordering::Equal => {
-                        // If it's equal, then we need to keep track of it as one of the
-                        // possible paths
-                        prev_nodes[*n2].push(n);
-                    }
-                    _ => (),
-                }
-            });
-        }
-
-        // Find the end node with the lowest distance
-        let end_node = graph.end_idxs.iter().fold(graph.end_idxs[0], |acc, idx| {
-            if distances[*idx] < distances[acc] {
-                *idx
-            } else {
-                acc
-            }
-        });
-
-        match part {
-            // For part 1, return the distance to the end node with the lowest weight
-            Part::One => distances[end_node],
-            Part::Two => {
-                // For part 2, we need to find the squares on the reverse path. This is a bit
-                // tricky because our path consists of nodes (which contain position + direction),
-                // not just positions. So if we don't remove duplicates, we'll end up
-                // double-counting squares that are visited twice via different directions.
-                let mut positions_on_path = HashSet::<Pos>::new();
-                positions_on_path.insert(graph.idxs_to_pos[&end_node]);
-                let mut nodes_to_traverse = vec![end_node];
-                while let Some(sq) = nodes_to_traverse.pop() {
-                    prev_nodes[sq].clone().into_iter().for_each(|prev_node| {
-                        positions_on_path.insert(graph.idxs_to_pos[&prev_node]);
-                        nodes_to_traverse.push(prev_node);
-                    });
-                }
-                positions_on_path.len() as u32
-            }
-        }
     }
 }
 
@@ -325,13 +318,21 @@ impl From<&str> for Grid {
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
-    let grid = Grid::from(input);
-    Some(grid.solve(Part::One))
+    let graph = Graph::from(Grid::from(input));
+    Some(graph.solve().0)
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    let grid = Grid::from(input);
-    Some(grid.solve(Part::Two))
+    let graph = Graph::from(Grid::from(input));
+    let nodes = graph.solve().1;
+    // Remove duplicate squares
+    Some(
+        nodes
+            .into_iter()
+            .map(|n| n.pos)
+            .collect::<HashSet<_>>()
+            .len() as u32,
+    )
 }
 
 #[cfg(test)]
