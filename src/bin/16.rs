@@ -1,7 +1,13 @@
 advent_of_code::solution!(16);
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::HashSet;
+
+enum Part {
+    One,
+    Two,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Dir {
@@ -158,12 +164,14 @@ struct Graph {
     start_idx: NodeIndex,
     end_idxs: Vec<NodeIndex>,
     n_nodes: usize,
+    idxs_to_pos: HashMap<NodeIndex, Pos>,
 }
 
 impl Grid {
     // Get all possible nodes
-    fn all_nodes_and_idxs(&self) -> HashMap<Node, NodeIndex> {
+    fn all_nodes_and_idxs(&self) -> (HashMap<Node, NodeIndex>, HashMap<NodeIndex, Pos>) {
         let mut m = HashMap::new();
+        let mut n = HashMap::new();
         let mut counter = 0;
         self.pos
             .iter()
@@ -177,13 +185,14 @@ impl Grid {
             })
             .for_each(|node| {
                 m.insert(node, counter);
+                n.insert(counter, node.pos);
                 counter += 1;
             });
-        m
+        (m, n)
     }
 
     fn to_graph(&self) -> Graph {
-        let all_nodes_and_idxs = self.all_nodes_and_idxs();
+        let (all_nodes_and_idxs, all_idxs_and_poses) = self.all_nodes_and_idxs();
         let mut all_edges = Vec::new();
         let mut start_idx = None;
         let mut end_idxs = Vec::new();
@@ -211,13 +220,15 @@ impl Grid {
             start_idx: *start_idx.expect("No start node found"),
             end_idxs,
             n_nodes: all_nodes_and_idxs.len(),
+            idxs_to_pos: all_idxs_and_poses,
         }
     }
 
-    fn solve(&self) -> u32 {
+    fn solve(&self, part: Part) -> u32 {
         // Populate distances table, with 0 for the starting node and a large number for all others
         let graph = self.to_graph();
         let mut distances = vec![u32::MAX; graph.n_nodes];
+        let mut prev_nodes = vec![Vec::<NodeIndex>::new(); graph.n_nodes];
         distances[graph.start_idx] = 0;
 
         let mut unvisited = (0..graph.n_nodes).collect::<HashSet<usize>>();
@@ -243,16 +254,51 @@ impl Grid {
             // Extract the edges that touch the node of interest
             graph.edges.iter().for_each(|(n1, n2, weight)| {
                 if *n1 == n {
-                    distances[*n2] = distances[*n2].min(distances[n] + weight);
+                    let distance_through_n = distances[n] + weight;
+                    match distance_through_n.cmp(&distances[*n2]) {
+                        Ordering::Less => {
+                            distances[*n2] = distance_through_n;
+                            prev_nodes[*n2] = vec![n];
+                        }
+                        Ordering::Equal => {
+                            prev_nodes[*n2].push(n);
+                        }
+                        _ => (),
+                    }
                 }
             });
         }
 
-        // Then pick the end node with the lowest weight
-        graph
-            .end_idxs
-            .into_iter()
-            .fold(u32::MAX, |acc, idx| acc.min(distances[idx]))
+        // Find the end node with the lowest weight
+        let end_node = graph.end_idxs.iter().fold(graph.end_idxs[0], |acc, idx| {
+            if distances[*idx] < distances[acc] {
+                *idx
+            } else {
+                acc
+            }
+        });
+
+        match part {
+            // For part 1, return the distance to the end node with the lowest weight
+            Part::One => distances[end_node],
+            Part::Two => {
+                // Find the nodes on the reverse path
+                let mut path = HashSet::new();
+                path.insert(end_node);
+                let mut nodes_to_traverse = vec![end_node];
+                while let Some(sq) = nodes_to_traverse.pop() {
+                    path.extend(prev_nodes[sq].clone());
+                    nodes_to_traverse.extend(prev_nodes[sq].clone());
+                }
+                // Need to deduplicate nodes on the same square
+                let mut poses_on_path = HashSet::new();
+                path.iter().for_each(|node_idx| {
+                    let pos = graph.idxs_to_pos.get(node_idx).expect("Node not found");
+                    poses_on_path.insert(pos);
+                });
+                poses_on_path.len() as u32
+            }
+        }
     }
 }
 
@@ -289,11 +335,12 @@ impl From<&str> for Grid {
 
 pub fn part_one(input: &str) -> Option<u32> {
     let grid = Grid::from(input);
-    Some(grid.solve())
+    Some(grid.solve(Part::One))
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
-    None
+    let grid = Grid::from(input);
+    Some(grid.solve(Part::Two))
 }
 
 #[cfg(test)]
@@ -309,6 +356,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(45));
     }
 }
