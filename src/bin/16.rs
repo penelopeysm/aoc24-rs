@@ -1,6 +1,7 @@
 advent_of_code::solution!(16);
 
-use std::cmp::Ordering;
+use priority_queue::PriorityQueue;
+use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -163,36 +164,29 @@ impl Grid {
         let mut prev_nodes = vec![Vec::<NodeIndex>::new(); graph.n_nodes];
         distances[graph.start_idx] = 0;
 
-        let mut unvisited = (0..graph.n_nodes).collect::<HashSet<usize>>();
+        let mut unvisited = PriorityQueue::new();
+        for (i, dist) in distances.iter().enumerate() {
+            unvisited.push(i, Reverse(*dist));
+        }
+
         while !unvisited.is_empty() {
             // Get the node with the smallest distance
-            let n = unvisited
-                .iter()
-                .fold(None, |maybe_acc, idx| match maybe_acc {
-                    None => Some(*idx),
-                    Some(acc) => {
-                        if distances[*idx] < distances[acc] {
-                            Some(*idx)
-                        } else {
-                            Some(acc)
-                        }
-                    }
-                })
-                .expect("No node found in unvisited -- shouldn't happen");
+            let (n, Reverse(d)) = unvisited.pop().unwrap();
             // Remove that node
             unvisited.remove(&n);
             // If the remaining nodes are unreachable, break
-            if distances[n] == u32::MAX {
+            if d == u32::MAX {
                 break;
             }
             // Extract the edges that begin at the node of interest
             graph.edges[&n].iter().for_each(|(n2, weight)| {
-                let distance_through_n = distances[n] + weight;
+                let distance_through_n = d + weight;
                 match distance_through_n.cmp(&distances[*n2]) {
                     // If the distance to the new node is less than the current minimum
                     Ordering::Less => {
                         // Update the distance, and set the previous node to this one
                         distances[*n2] = distance_through_n;
+                        unvisited.change_priority(n2, Reverse(distance_through_n));
                         prev_nodes[*n2] = vec![n];
                     }
                     Ordering::Equal => {
