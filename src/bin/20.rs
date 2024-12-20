@@ -45,10 +45,9 @@ where
 
         // Remove the node with the smallest distance
         while let Some((n, Reverse(d))) = unvisited.pop() {
-            // If the remaining nodes are unreachable, panic
+            // If the remaining nodes are unreachable, finish
             if d == u32::MAX {
-                // break;
-                panic!("Unreachable node");
+                break;
             }
             // Retrieve the edges that begin at the node of interest
             self.edges[n].iter().for_each(|(n2, weight)| {
@@ -80,17 +79,16 @@ impl Graph<Point> {
         let mut cheats = BTreeMap::<u32, u32>::new();
         // Iterate over the points in the forward graph.
         for (fnode, fdist) in fdists.iter() {
-            // If it's unreachable, panic -- this should have been caught earlier
+            // Skip unreachable nodes
             if fdist == &u32::MAX {
-                panic!("Unreachable node: {:?}", fnode);
+                continue;
             }
             // Get all points in graph
             for (rnode, rdist) in rdists.iter() {
-                // If it's unreachable, panic -- this should have been caught earlier
+                // Skip unreachable nodes
                 if rdist == &u32::MAX {
-                    panic!("Unreachable node: {:?}", rnode);
+                    continue;
                 }
-                // If it's within 20 steps
                 let manhattan = fnode.manhattan(rnode) as u32;
                 if manhattan_filter(manhattan) {
                     // Otherwise, calculate the time saved
@@ -124,28 +122,6 @@ impl Point {
             Point::new(self.i, self.j + 1),
             Point::new(self.i, self.j - 1),
         ])
-    }
-
-    fn get_double_adjacents(&self) -> HashSet<Point> {
-        // No need bounds check for diagonal ones
-        // Also no need to check the ones that exceed the number of rows/cols because those will
-        // never be nodes
-        let mut double_adjacents = HashSet::from([
-            Point::new(self.i + 1, self.j + 1),
-            Point::new(self.i + 1, self.j - 1),
-            Point::new(self.i - 1, self.j + 1),
-            Point::new(self.i - 1, self.j - 1),
-            Point::new(self.i + 2, self.j),
-            Point::new(self.i, self.j + 2),
-        ]);
-        // But we do need to check when subtracting 2
-        if self.i >= 2 {
-            double_adjacents.insert(Point::new(self.i - 2, self.j));
-        }
-        if self.j >= 2 {
-            double_adjacents.insert(Point::new(self.i, self.j - 2));
-        }
-        double_adjacents
     }
 
     fn manhattan(&self, other: &Point) -> usize {
