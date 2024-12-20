@@ -95,7 +95,7 @@ impl Graph<Point> {
                     let cheating_time = fdist + rdist + manhattan;
                     if cheating_time < *original_solution {
                         let timesave = original_solution - cheating_time;
-                        cheats.entry(timesave).and_modify(|e| *e += 1).or_insert(0);
+                        cheats.entry(timesave).and_modify(|e| *e += 1).or_insert(1);
                     }
                 }
             }
