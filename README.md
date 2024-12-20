@@ -2,6 +2,8 @@
 
 Advent of Code 2024 in Rust
 
+(except for Day 19, which I golfed in Python)
+
 Repository generated from [the template repository](https://github.com/fspoettel/advent-of-code-rust)
 
 ## One-time setup
