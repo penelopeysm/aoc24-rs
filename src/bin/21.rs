@@ -60,7 +60,7 @@ fn move_v_then_h(p1: (i32, i32), p2: (i32, i32)) -> Vec<char> {
     vertical
 }
 
-fn shortest_way_2(c1: char, c2: char, keypad: HashMap<char, (i32, i32)>) -> Vec<char> {
+fn shortest_way(c1: char, c2: char, keypad: HashMap<char, (i32, i32)>) -> Vec<char> {
     let p1 = keypad[&c1];
     let p2 = keypad[&c2];
     let horizontal = move_horizontal(p2.1 - p1.1);
@@ -74,7 +74,7 @@ fn shortest_way_2(c1: char, c2: char, keypad: HashMap<char, (i32, i32)>) -> Vec<
         let can_move_h_then_v = values.contains(&(p1.0, p2.1));
         let can_move_v_then_h = values.contains(&(p2.0, p1.1));
         if p2.1 > p1.1 {
-            // v>A is shorter than >vA
+            // v>A is shorter than >vA (after it's been expanded twice)
             // ^>A is equal to     ^vA
             if can_move_v_then_h {
                 move_v_then_h(p1, p2)
@@ -95,21 +95,20 @@ fn shortest_way_2(c1: char, c2: char, keypad: HashMap<char, (i32, i32)>) -> Vec<
 
 #[derive(Debug)]
 struct Code {
-    numeric: u64,     // 29
-    chars: Vec<char>, // ['0', '2', '9', 'A']
+    numeric: u64,     // e.g. 29
+    chars: Vec<char>, // e.g. ['0', '2', '9', 'A']
 }
 
 impl Code {
     fn first_robot_way(&self) -> Vec<char> {
-        let mut way = shortest_way_2('A', self.chars[0], orig_keypad());
+        let mut way = shortest_way('A', self.chars[0], orig_keypad());
         way.push('A');
         for i in self.chars.windows(2) {
-            way.append(&mut shortest_way_2(i[0], i[1], orig_keypad()));
+            way.append(&mut shortest_way(i[0], i[1], orig_keypad()));
             way.push('A');
         }
         way
     }
-
     fn complexity(&self, n: usize) -> u64 {
         let mut first_robot_way = self.first_robot_way();
         first_robot_way.insert(0, 'A');
@@ -123,11 +122,21 @@ impl Code {
 
 #[memoize]
 fn robot_length_at_depth(c1: char, c2: char, n: usize) -> u64 {
-    let mut shortest_way = shortest_way_2(c1, c2, robot_keypad());
+    // Find the shortest path to move from c1 to c2
+    let mut shortest_way = shortest_way(c1, c2, robot_keypad());
+    // The shortest path doesn't include an 'A', which the next robot needs to press
     shortest_way.push('A');
     if n == 1 {
+        // If at depth 1, then the number of keypresses needed to get from
+        // c1 to c2 is just the length of the shortest path plus its A
         shortest_way.len() as u64
     } else {
+        // Otherwise, suppose it gives us a sequence of characters like >>A. To press these
+        // buttons, the next robot will need to go (1) from A to >, (2) from > to >, and (3) from >
+        // to A. (Note that regardless of where in the _previous_ sequence this '>>A' came from,
+        // the robot always starts at A, either because that is its initial position, or because
+        // the previous sequence of inputs would have returned it to A.) Thus we can recursively
+        // call this function, and the memoisation ensures that it is efficient.
         let mut total_length = 0;
         shortest_way.insert(0, 'A');
         for w in shortest_way.windows(2) {
@@ -159,15 +168,17 @@ fn _unstep_robot(way: String, keypad: HashMap<char, (i32, i32)>) -> String {
     }
     undone.iter().collect()
 }
+// For debugging purposes
 fn _next_robot_way(chars: Vec<char>) -> Vec<char> {
-    let mut way = shortest_way_2('A', chars[0], orig_keypad());
+    let mut way = shortest_way('A', chars[0], orig_keypad());
     way.push('A');
     for i in chars.windows(2) {
-        way.append(&mut shortest_way_2(i[0], i[1], orig_keypad()));
+        way.append(&mut shortest_way(i[0], i[1], orig_keypad()));
         way.push('A');
     }
     way
 }
+// For debugging purposes
 fn _step_robot(prev_step: String) -> String {
     let prev_step = prev_step.chars().collect::<Vec<_>>();
     let way = _next_robot_way(prev_step);
