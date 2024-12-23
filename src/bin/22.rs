@@ -48,24 +48,6 @@ fn get_possible_prices(first: u64, n: u32) -> HashMap<Vec<i64>, u64> {
     prices
 }
 
-fn get_all_keys(hashmaps: Vec<HashMap<Vec<i64>, u64>>) -> HashSet<Vec<i64>> {
-    let mut keys = HashSet::new();
-    for hashmap in hashmaps {
-        for key in hashmap.keys() {
-            keys.insert(key.clone());
-        }
-    }
-    keys
-}
-
-fn get_sum_of_lookups(hashmaps: &[HashMap<Vec<i64>, u64>], key: Vec<i64>) -> u64 {
-    let mut sum = 0;
-    for hashmap in hashmaps {
-        sum += hashmap.get(&key).unwrap_or(&0);
-    }
-    sum
-}
-
 fn parse_input(input: &str) -> Vec<u64> {
     input.lines().map(|line| line.parse().unwrap()).collect()
 }
@@ -81,15 +63,18 @@ pub fn part_one(input: &str) -> Option<u64> {
 
 pub fn part_two(input: &str) -> Option<u64> {
     let inputs = parse_input(input);
-    let prices: Vec<HashMap<Vec<i64>, u64>> = inputs
+    let mut merged = HashMap::new(); // map of changes -> total price
+    let mut largest_val = 0;
+    inputs
         .into_iter()
         .map(|first| get_possible_prices(first, 2000))
-        .collect();
-    let keys = get_all_keys(prices.clone());
-    let best_price = keys
-        .into_iter()
-        .fold(0, |acc, key| acc.max(get_sum_of_lookups(&prices, key)));
-    Some(best_price)
+        .for_each(|prices| {
+            for (key, val) in prices.into_iter() {
+                let new_val = merged.entry(key).and_modify(|v| *v += val).or_insert(val);
+                largest_val = largest_val.max(*new_val);
+            }
+        });
+    Some(largest_val)
 }
 
 #[cfg(test)]
