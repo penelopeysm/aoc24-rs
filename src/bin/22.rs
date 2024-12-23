@@ -1,6 +1,6 @@
 advent_of_code::solution!(22);
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 fn next_secret(secret: u64) -> u64 {
     let a = secret * 64; // 2^6
@@ -24,23 +24,27 @@ fn nth_secret_after(first: u64, n: u32) -> u64 {
     secret
 }
 
-fn get_possible_prices(first: u64, n: u32) -> HashMap<Vec<i64>, u64> {
+fn get_possible_prices(first: u64, n: u32) -> HashMap<[i64; 4], u64> {
     let mut secret = first;
     let mut prices = HashMap::new();
-    let mut changes = Vec::new();
+    let mut changes = [0, 0, 0, 0];
     let mut last_price = first % 10;
-    for _ in 0..n {
+    for i in 0..n {
         secret = next_secret(secret);
         let this_price = secret % 10;
         let price_diff = (this_price as i64) - (last_price as i64);
         // Tabulate the changes
-        if changes.len() == 4 {
-            changes.remove(0);
+        if i <= 3 {
+            changes[i as usize] = price_diff;
         }
-        changes.push(price_diff);
-        // Add them to the hashmap
-        if changes.len() == 4 {
-            prices.entry(changes.clone()).or_insert(this_price);
+        else {
+            changes[0] = changes[1];
+            changes[1] = changes[2];
+            changes[2] = changes[3];
+            changes[3] = price_diff;
+        }
+        if i >= 3 {
+            prices.entry(changes).or_insert(this_price);
         }
         // Update the last price
         last_price = this_price;
@@ -84,15 +88,12 @@ mod tests {
     #[test]
     fn test_part_one() {
         let result = part_one(&advent_of_code::template::read_file("examples", DAY));
-        // NOTE: This is the solution for (1, 2, 3, 2024).
-        // The original example in part 1 of the problem is (1, 10, 100, 2024) which
-        // gives a result of 37327623
-        assert_eq!(result, Some(37990510));
+        assert_eq!(result, Some(37327623));
     }
 
     #[test]
     fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
+        let result = part_two(&advent_of_code::template::read_file_part("examples", DAY, 2));
         assert_eq!(result, Some(23));
     }
 }
